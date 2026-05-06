@@ -1,0 +1,7 @@
+httpx
+python-dotenv
+pydantic
+pandas
+numpy
+websockets
+py-clob-client
