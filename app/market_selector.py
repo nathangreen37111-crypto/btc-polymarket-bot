@@ -8,8 +8,8 @@ def select_nearest_markets(events: list[dict]) -> dict:
     """
     Select the nearest valid 5m and 15m BTC markets.
 
-    5m: only allow markets ending within 10 minutes.
-    15m: only allow markets ending within 30 minutes.
+    Temporary wider window:
+    allows future markets up to ~25 hours out so the bot keeps researching.
     """
     selected = {
         "5m": None,
@@ -37,10 +37,10 @@ def select_nearest_markets(events: list[dict]) -> dict:
         if seconds_left is None or seconds_left <= 0:
             continue
 
-        if market_type == "5m" and seconds_left > 600:
+        if market_type == "5m" and seconds_left > 90000:
             continue
 
-        if market_type == "15m" and seconds_left > 1800:
+        if market_type == "15m" and seconds_left > 90000:
             continue
 
         current_best = best_seconds_left[market_type]
