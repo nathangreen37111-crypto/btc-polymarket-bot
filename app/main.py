@@ -4,8 +4,10 @@ from app.db import init_db, log_tick
 from app.btc_feed import get_btc_price
 from app.market_finder import find_btc_markets, get_market_type, get_inner_market
 from app.polymarket_prices import get_up_down_prices
+from app.time_utils import seconds_until
 from app.paper_research import (
     maybe_open_paper_bet,
+    maybe_open_late_entry_paper_bet,
     resolve_open_paper_bets,
     print_paper_summary,
 )
@@ -47,21 +49,31 @@ async def run():
                         continue
 
                     market_prices = get_up_down_prices(inner_market)
+                    seconds_left = seconds_until(market_prices.get("end_time"))
 
                     print(
-    f"{market_type} market | "
-    f"UP ask={market_prices['up_best_ask']} | "
-    f"DOWN ask={market_prices['down_best_ask']} | "
-    f"UP spread={market_prices['up_spread']} | "
-    f"DOWN spread={market_prices['down_spread']} | "
-    f"{market_prices['question']}"
-)
+                        f"{market_type} market | "
+                        f"seconds_left={seconds_left} | "
+                        f"UP ask={market_prices['up_best_ask']} | "
+                        f"DOWN ask={market_prices['down_best_ask']} | "
+                        f"UP spread={market_prices['up_spread']} | "
+                        f"DOWN spread={market_prices['down_spread']} | "
+                        f"{market_prices['question']}"
+                    )
 
                     maybe_open_paper_bet(
                         market_type=market_type,
                         btc_price=btc_price,
                         market_prices=market_prices,
                     )
+
+                    if settings.enable_late_entry_model:
+                        maybe_open_late_entry_paper_bet(
+                            market_type=market_type,
+                            btc_price=btc_price,
+                            market_prices=market_prices,
+                            seconds_left=seconds_left,
+                        )
 
                 print_paper_summary()
 

@@ -25,6 +25,7 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             resolved_at TEXT,
             mode TEXT,
+            strategy_name TEXT,
             market_type TEXT,
             side TEXT,
             stake_usd REAL,
@@ -32,6 +33,7 @@ def init_db():
             entry_btc_price REAL,
             exit_btc_price REAL,
             window_seconds INTEGER,
+            seconds_left_at_entry INTEGER,
             momentum_pct REAL,
             status TEXT,
             won INTEGER,
@@ -39,6 +41,17 @@ def init_db():
             reason TEXT
         )
         """)
+
+        existing_columns = [
+            row[1]
+            for row in conn.execute("PRAGMA table_info(paper_bets)").fetchall()
+        ]
+
+        if "strategy_name" not in existing_columns:
+            conn.execute("ALTER TABLE paper_bets ADD COLUMN strategy_name TEXT")
+
+        if "seconds_left_at_entry" not in existing_columns:
+            conn.execute("ALTER TABLE paper_bets ADD COLUMN seconds_left_at_entry INTEGER")
 
         conn.commit()
 

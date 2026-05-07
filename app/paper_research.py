@@ -28,43 +28,48 @@ def _get_recent_price(seconds_back: int):
 
     return float(row[0])
 
-def _has_open_bet(market_type: str):
+def _has_open_bet(market_type: str, strategy_name: str):
     with get_conn() as conn:
         row = conn.execute("""
         SELECT id
         FROM paper_bets
         WHERE status = 'open'
         AND market_type = ?
+        AND strategy_name = ?
         LIMIT 1
-        """, (market_type,)).fetchone()
+        """, (market_type, strategy_name)).fetchone()
 
     return row is not None
 
 def _open_paper_bet(
+    strategy_name: str,
     market_type: str,
     side: str,
     btc_price: float,
     entry_price: float,
     window_seconds: int,
+    seconds_left_at_entry: int | None,
     momentum_pct: float,
     reason: str,
 ):
     with get_conn() as conn:
         conn.execute("""
         INSERT INTO paper_bets (
-            mode, market_type, side, stake_usd, entry_price,
-            entry_btc_price, window_seconds, momentum_pct,
-            status, reason
+            mode, strategy_name, market_type, side, stake_usd, entry_price,
+            entry_btc_price, window_seconds, seconds_left_at_entry,
+            momentum_pct, status, reason
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             settings.mode,
+            strategy_name,
             market_type,
             side,
             settings.paper_stake_usd,
             entry_price,
             btc_price,
             window_seconds,
+            seconds_left_at_entry,
             momentum_pct,
             "open",
             reason,
@@ -72,6 +77,8 @@ def _open_paper_bet(
         conn.commit()
 
 def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict):
+    strategy_name = f"{market_type}_momentum"
+
     if market_type == "5m":
         lookback_seconds = 60
         window_seconds = 5 * 60
@@ -81,20 +88,20 @@ def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict
     else:
         return
 
-    if _has_open_bet(market_type):
+    if _has_open_bet(market_type, strategy_name):
         return
 
     old_price = _get_recent_price(lookback_seconds)
 
     if old_price is None:
-        print(f"{market_type}: waiting for enough price history")
+        print(f"{strategy_name}: waiting for enough price history")
         return
 
     momentum_pct = (btc_price - old_price) / old_price
 
     if abs(momentum_pct) < settings.min_momentum_pct:
         print(
-            f"{market_type}: no paper bet | momentum={momentum_pct:.4%} "
+            f"{strategy_name}: no paper bet | momentum={momentum_pct:.4%} "
             f"is below threshold={settings.min_momentum_pct:.4%}"
         )
         return
@@ -111,27 +118,27 @@ def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict
         ask_depth = market_prices.get("down_ask_depth")
 
     if entry_price is None:
-        print(f"{market_type}: missing Polymarket CLOB best ask for {side}")
+        print(f"{strategy_name}: missing Polymarket CLOB best ask for {side}")
         return
 
     spread = side_spread or 0
 
     if spread > settings.max_spread:
         print(
-            f"{market_type}: skipped | {side} spread={spread:.2f} "
+            f"{strategy_name}: skipped | {side} spread={spread:.2f} "
             f"is above max_spread={settings.max_spread:.2f}"
         )
         return
 
     if ask_depth is not None and ask_depth < settings.paper_stake_usd:
         print(
-            f"{market_type}: skipped | {side} ask depth=${ask_depth:.2f} "
+            f"{strategy_name}: skipped | {side} ask depth=${ask_depth:.2f} "
             f"is below stake=${settings.paper_stake_usd:.2f}"
         )
         return
 
     reason = (
-        f"{market_type} paper bet using real CLOB best ask: "
+        f"{strategy_name} using real CLOB best ask: "
         f"BTC momentum over {lookback_seconds}s was {momentum_pct:.4%}, "
         f"so bot would choose {side}. "
         f"Entry best ask={entry_price:.3f}, spread={spread:.3f}, "
@@ -139,11 +146,13 @@ def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict
     )
 
     _open_paper_bet(
+        strategy_name=strategy_name,
         market_type=market_type,
         side=side,
         btc_price=btc_price,
         entry_price=entry_price,
         window_seconds=window_seconds,
+        seconds_left_at_entry=None,
         momentum_pct=momentum_pct,
         reason=reason,
     )
@@ -151,10 +160,124 @@ def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict
     max_profit = (settings.paper_stake_usd / entry_price) - settings.paper_stake_usd
 
     print(
-        f"OPEN PAPER BET | {market_type} | {side} | "
+        f"OPEN PAPER BET | {strategy_name} | {side} | "
         f"stake=${settings.paper_stake_usd:.2f} | "
         f"Polymarket best ask={entry_price:.3f} | "
         f"possible profit=${max_profit:.2f} | "
+        f"entry BTC=${btc_price:,.2f} | "
+        f"momentum={momentum_pct:.4%}"
+    )
+
+def maybe_open_late_entry_paper_bet(
+    market_type: str,
+    btc_price: float,
+    market_prices: dict,
+    seconds_left: int | None,
+):
+    strategy_name = f"{market_type}_late_entry"
+
+    if seconds_left is None:
+        print(f"{strategy_name}: skipped | missing seconds_left")
+        return
+
+    if market_type == "5m":
+        lookback_seconds = 30
+        window_seconds = seconds_left
+        min_seconds_left = settings.late_5m_min_seconds_left
+        max_seconds_left = settings.late_5m_max_seconds_left
+    elif market_type == "15m":
+        lookback_seconds = 60
+        window_seconds = seconds_left
+        min_seconds_left = settings.late_15m_min_seconds_left
+        max_seconds_left = settings.late_15m_max_seconds_left
+    else:
+        return
+
+    if seconds_left < min_seconds_left or seconds_left > max_seconds_left:
+        print(
+            f"{strategy_name}: waiting | seconds_left={seconds_left} "
+            f"needs {min_seconds_left}-{max_seconds_left}"
+        )
+        return
+
+    if _has_open_bet(market_type, strategy_name):
+        return
+
+    old_price = _get_recent_price(lookback_seconds)
+
+    if old_price is None:
+        print(f"{strategy_name}: waiting for enough price history")
+        return
+
+    momentum_pct = (btc_price - old_price) / old_price
+
+    if abs(momentum_pct) < settings.min_momentum_pct:
+        print(
+            f"{strategy_name}: no paper bet | momentum={momentum_pct:.4%} "
+            f"is below threshold={settings.min_momentum_pct:.4%}"
+        )
+        return
+
+    if momentum_pct > 0:
+        side = "UP"
+        entry_price = market_prices.get("up_best_ask")
+        side_spread = market_prices.get("up_spread")
+        ask_depth = market_prices.get("up_ask_depth")
+    else:
+        side = "DOWN"
+        entry_price = market_prices.get("down_best_ask")
+        side_spread = market_prices.get("down_spread")
+        ask_depth = market_prices.get("down_ask_depth")
+
+    if entry_price is None:
+        print(f"{strategy_name}: missing Polymarket CLOB best ask for {side}")
+        return
+
+    spread = side_spread or 0
+
+    if spread > settings.max_spread:
+        print(
+            f"{strategy_name}: skipped | {side} spread={spread:.2f} "
+            f"is above max_spread={settings.max_spread:.2f}"
+        )
+        return
+
+    if ask_depth is not None and ask_depth < settings.paper_stake_usd:
+        print(
+            f"{strategy_name}: skipped | {side} ask depth=${ask_depth:.2f} "
+            f"is below stake=${settings.paper_stake_usd:.2f}"
+        )
+        return
+
+    reason = (
+        f"{strategy_name} using real CLOB best ask near expiration: "
+        f"seconds_left={seconds_left}, "
+        f"BTC momentum over {lookback_seconds}s was {momentum_pct:.4%}, "
+        f"so bot would choose {side}. "
+        f"Entry best ask={entry_price:.3f}, spread={spread:.3f}, "
+        f"ask depth={ask_depth}."
+    )
+
+    _open_paper_bet(
+        strategy_name=strategy_name,
+        market_type=market_type,
+        side=side,
+        btc_price=btc_price,
+        entry_price=entry_price,
+        window_seconds=window_seconds,
+        seconds_left_at_entry=seconds_left,
+        momentum_pct=momentum_pct,
+        reason=reason,
+    )
+
+    max_profit = (settings.paper_stake_usd / entry_price) - settings.paper_stake_usd
+
+    print(
+        f"OPEN LATE PAPER BET | {strategy_name} | {side} | "
+        f"stake=${settings.paper_stake_usd:.2f} | "
+        f"Polymarket best ask={entry_price:.3f} | "
+        f"possible profit=${max_profit:.2f} | "
+        f"seconds_left={seconds_left} | "
         f"entry BTC=${btc_price:,.2f} | "
         f"momentum={momentum_pct:.4%}"
     )
@@ -241,16 +364,17 @@ def print_paper_summary():
         WHERE status = 'resolved'
         """).fetchone()
 
-        by_type = conn.execute("""
+        by_strategy = conn.execute("""
         SELECT
+            COALESCE(strategy_name, market_type) as strategy,
             market_type,
             COUNT(*),
             SUM(CASE WHEN won = 1 THEN 1 ELSE 0 END),
             COALESCE(SUM(profit_usd), 0)
         FROM paper_bets
         WHERE status = 'resolved'
-        GROUP BY market_type
-        ORDER BY market_type
+        GROUP BY strategy, market_type
+        ORDER BY strategy, market_type
         """).fetchall()
 
     total, wins, losses, profit = row
@@ -267,10 +391,11 @@ def print_paper_summary():
         f"win_rate={win_rate:.1f}% | total P/L=${profit:.2f}"
     )
 
-    for market_type, count, type_wins, type_profit in by_type:
+    for strategy, market_type, count, type_wins, type_profit in by_strategy:
         type_wins = type_wins or 0
         type_win_rate = type_wins / count * 100 if count else 0
         print(
-            f"  {market_type}: trades={count} | wins={type_wins} | "
-            f"win_rate={type_win_rate:.1f}% | P/L=${type_profit:.2f}"
+            f"  {strategy}: market={market_type} | trades={count} | "
+            f"wins={type_wins} | win_rate={type_win_rate:.1f}% | "
+            f"P/L=${type_profit:.2f}"
         )

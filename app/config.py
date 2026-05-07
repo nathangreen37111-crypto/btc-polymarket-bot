@@ -17,6 +17,14 @@ class Settings(BaseModel):
     trade_5m: bool = os.getenv("TRADE_5M", "true").lower() == "true"
     trade_15m: bool = os.getenv("TRADE_15M", "true").lower() == "true"
 
+    enable_late_entry_model: bool = os.getenv("ENABLE_LATE_ENTRY_MODEL", "true").lower() == "true"
+
+    late_5m_min_seconds_left: int = int(os.getenv("LATE_5M_MIN_SECONDS_LEFT", "30"))
+    late_5m_max_seconds_left: int = int(os.getenv("LATE_5M_MAX_SECONDS_LEFT", "90"))
+
+    late_15m_min_seconds_left: int = int(os.getenv("LATE_15M_MIN_SECONDS_LEFT", "60"))
+    late_15m_max_seconds_left: int = int(os.getenv("LATE_15M_MAX_SECONDS_LEFT", "180"))
+
     require_manual_approval: bool = os.getenv("REQUIRE_MANUAL_APPROVAL", "true").lower() == "true"
 
     paper_stake_usd: float = float(os.getenv("PAPER_STAKE_USD", "20"))
