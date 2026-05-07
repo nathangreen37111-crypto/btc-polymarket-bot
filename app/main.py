@@ -1,5 +1,7 @@
 import asyncio
 from app.config import settings
+from app.strategy_engine import get_strategy_decisions
+from app.paper_research import open_strategy_paper_bet
 from app.db import init_db, log_tick
 from app.btc_feed import get_btc_price
 from app.market_finder import find_btc_markets, get_market_type, get_inner_market
@@ -61,19 +63,32 @@ async def run():
                         f"{market_prices['question']}"
                     )
 
-                    maybe_open_paper_bet(
+                    strategy_decisions = get_strategy_decisions(
                         market_type=market_type,
                         btc_price=btc_price,
                         market_prices=market_prices,
+                        seconds_left=seconds_left,
                     )
 
-                    if settings.enable_late_entry_model:
-                        maybe_open_late_entry_paper_bet(
+                    for decision in strategy_decisions:
+                        if not decision.should_trade:
+                            print(f"{decision.strategy_name}: {decision.reason}")
+                            continue
+
+                        window_seconds = seconds_left if seconds_left and seconds_left > 0 else (300 if market_type == "5m" else 900)
+
+                        open_strategy_paper_bet(
+                            strategy_name=decision.strategy_name,
                             market_type=market_type,
+                            side=decision.side,
                             btc_price=btc_price,
-                            market_prices=market_prices,
-                            seconds_left=seconds_left,
+                            entry_price=decision.entry_price,
+                            window_seconds=window_seconds,
+                            seconds_left_at_entry=decision.seconds_left,
+                            momentum_pct=decision.momentum_pct,
+                            reason=decision.reason,
                         )
+
 
                 print_paper_summary()
 

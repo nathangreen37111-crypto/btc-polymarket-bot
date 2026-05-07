@@ -157,6 +157,43 @@ def maybe_open_paper_bet(market_type: str, btc_price: float, market_prices: dict
         reason=reason,
     )
 
+def open_strategy_paper_bet(
+    strategy_name: str,
+    market_type: str,
+    side: str,
+    btc_price: float,
+    entry_price: float,
+    window_seconds: int,
+    seconds_left_at_entry: int | None,
+    momentum_pct: float | None,
+    reason: str,
+):
+    if _has_open_bet(market_type, strategy_name):
+        return
+
+    _open_paper_bet(
+        strategy_name=strategy_name,
+        market_type=market_type,
+        side=side,
+        btc_price=btc_price,
+        entry_price=entry_price,
+        window_seconds=window_seconds,
+        seconds_left_at_entry=seconds_left_at_entry,
+        momentum_pct=momentum_pct or 0,
+        reason=reason,
+    )
+
+    max_profit = (settings.paper_stake_usd / entry_price) - settings.paper_stake_usd
+
+    print(
+        f"OPEN STRATEGY PAPER BET | {strategy_name} | {market_type} | {side} | "
+        f"stake=${settings.paper_stake_usd:.2f} | "
+        f"entry={entry_price:.3f} | "
+        f"possible_profit=${max_profit:.2f} | "
+        f"seconds_left={seconds_left_at_entry} | "
+        f"BTC=${btc_price:,.2f}"
+    )
+
     max_profit = (settings.paper_stake_usd / entry_price) - settings.paper_stake_usd
 
     print(
