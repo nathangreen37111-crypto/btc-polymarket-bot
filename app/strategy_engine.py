@@ -349,41 +349,123 @@ def get_strategy_decisions(market_type, btc_price, market_prices, seconds_left):
     decisions = []
 
     if market_type == "5m":
-        if settings.enable_5m_strong_momentum:
-            decisions.append(decide_5m_strong_momentum(btc_price, market_prices, seconds_left))
+        if settings.enable_5m_base:
+            decision = decide_5m_late_entry(btc_price, market_prices, seconds_left)
+            decision.strategy_name = "5m_base"
+            decisions.append(decision)
 
         if settings.enable_5m_late_entry:
-            decisions.append(decide_5m_late_entry(btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_5m_late_entry(btc_price, market_prices, seconds_left)
+            )
+
+        if settings.enable_5m_strong_momentum:
+            decisions.append(
+                decide_5m_strong_momentum(btc_price, market_prices, seconds_left)
+            )
 
         if settings.enable_5m_distance_start:
-            decisions.append(decide_distance_from_start("5m_distance_from_start", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_distance_from_start(
+                    "5m_distance_from_start",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_5m_multitimeframe:
-            decisions.append(decide_multitimeframe("5m_multitimeframe", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_multitimeframe(
+                    "5m_multitimeframe",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_5m_volatility_filter:
-            decisions.append(decide_volatility_filtered("5m_volatility_filtered", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_volatility_filtered(
+                    "5m_volatility_filtered",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_5m_reversal_filter:
-            decisions.append(decide_reversal_filter("5m_reversal_filter", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_reversal_filter(
+                    "5m_reversal_filter",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
-    if market_type == "15m":
-        if settings.enable_15m_momentum:
-            decisions.append(decide_15m_momentum(btc_price, market_prices, seconds_left))
+    elif market_type == "15m":
+        if settings.enable_15m_base:
+            decision = decide_15m_late_entry(btc_price, market_prices, seconds_left)
+            decision.strategy_name = "15m_base"
+            decisions.append(decision)
 
         if settings.enable_15m_late_entry:
-            decisions.append(decide_15m_late_entry(btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_15m_late_entry(btc_price, market_prices, seconds_left)
+            )
+
+        if settings.enable_15m_momentum:
+            decisions.append(
+                decide_15m_momentum(btc_price, market_prices, seconds_left)
+            )
 
         if settings.enable_15m_distance_start:
-            decisions.append(decide_distance_from_start("15m_distance_from_start", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_distance_from_start(
+                    "15m_distance_from_start",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_15m_multitimeframe:
-            decisions.append(decide_multitimeframe("15m_multitimeframe", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_multitimeframe(
+                    "15m_multitimeframe",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_15m_volatility_filter:
-            decisions.append(decide_volatility_filtered("15m_volatility_filtered", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_volatility_filtered(
+                    "15m_volatility_filtered",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
         if settings.enable_15m_reversal_filter:
-            decisions.append(decide_reversal_filter("15m_reversal_filter", market_type, btc_price, market_prices, seconds_left))
+            decisions.append(
+                decide_reversal_filter(
+                    "15m_reversal_filter",
+                    market_type,
+                    btc_price,
+                    market_prices,
+                    seconds_left,
+                )
+            )
 
     return decisions

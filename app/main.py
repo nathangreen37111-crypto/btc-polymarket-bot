@@ -1,18 +1,17 @@
 import asyncio
+
 from app.config import settings
-from app.strategy_engine import get_strategy_decisions
-from app.paper_research import open_strategy_paper_bet
 from app.db import init_db, log_tick
 from app.btc_feed import get_btc_price
-from app.market_finder import find_btc_markets, get_market_type, get_inner_market
-from app.polymarket_prices import get_up_down_prices
-from app.time_utils import seconds_until
+from app.market_finder import find_btc_markets
+from app.market_selector import select_nearest_markets
+from app.strategy_engine import get_strategy_decisions
 from app.paper_research import (
-    maybe_open_paper_bet,
-    maybe_open_late_entry_paper_bet,
+    open_strategy_paper_bet,
     resolve_open_paper_bets,
     print_paper_summary,
 )
+
 
 async def run():
     init_db()
@@ -37,24 +36,25 @@ async def run():
             if settings.mode == "research":
                 resolve_open_paper_bets(btc_price)
 
-                for event in events:
-                    market_type = get_market_type(event)
+                selected_markets = select_nearest_markets(events)
 
-                    if market_type == "5m" and not settings.trade_5m:
+                for market_type, selected in selected_markets.items():
+                    if selected is None:
+                        print(f"{market_type}: no valid near-term market found")
                         continue
 
-                    if market_type == "15m" and not settings.trade_15m:
+                    market_prices = selected["market_prices"]
+                    seconds_left = selected["seconds_left"]
+
+                    # Optional safety: respect old TRADE_5M / TRADE_15M flags if they exist.
+                    if market_type == "5m" and hasattr(settings, "trade_5m") and not settings.trade_5m:
                         continue
 
-                    inner_market = get_inner_market(event)
-                    if not inner_market:
+                    if market_type == "15m" and hasattr(settings, "trade_15m") and not settings.trade_15m:
                         continue
-
-                    market_prices = get_up_down_prices(inner_market)
-                    seconds_left = seconds_until(market_prices.get("end_time"))
 
                     print(
-                        f"{market_type} market | "
+                        f"{market_type} SELECTED | "
                         f"seconds_left={seconds_left} | "
                         f"UP ask={market_prices['up_best_ask']} | "
                         f"DOWN ask={market_prices['down_best_ask']} | "
@@ -75,7 +75,11 @@ async def run():
                             print(f"{decision.strategy_name}: {decision.reason}")
                             continue
 
-                        window_seconds = seconds_left if seconds_left and seconds_left > 0 else (300 if market_type == "5m" else 900)
+                        window_seconds = (
+                            seconds_left
+                            if seconds_left and seconds_left > 0
+                            else (300 if market_type == "5m" else 900)
+                        )
 
                         open_strategy_paper_bet(
                             strategy_name=decision.strategy_name,
@@ -89,13 +93,13 @@ async def run():
                             reason=decision.reason,
                         )
 
-
                 print_paper_summary()
 
         except Exception as e:
             print(f"ERROR: {e}")
 
         await asyncio.sleep(10)
+
 
 if __name__ == "__main__":
     asyncio.run(run())
